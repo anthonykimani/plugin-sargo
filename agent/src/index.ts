@@ -23,9 +23,6 @@ import { defaultCharacter } from "./defaultCharacter.ts";
 import { bootstrapPlugin } from "@elizaos/plugin-bootstrap";
 import JSON5 from 'json5';
 import { rolldicePlugin } from "@elizaos/plugin-rolldice";
-// import { thirdwebPlugin } from "@elizaos/plugin-thirdweb";
-import { newsPlugin } from "@elizaos/plugin-news";
-// import createGoatPlugin  from "@elizaos/plugin-goat";
 import { sargoInternPlugin } from "@elizaos/plugin-sargo";
 
 import fs from "fs";
@@ -634,7 +631,6 @@ export async function createAgent(
         plugins: [
             bootstrapPlugin,
             rolldicePlugin,
-            newsPlugin,
             sargoInternPlugin
         ]
             .flat()

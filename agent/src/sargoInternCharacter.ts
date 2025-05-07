@@ -6,7 +6,6 @@ export const sargoInternCharacter: Character = {
     username: "sargointern",
     plugins: [
         "@elizaos/plugin-rolldice",
-        "@elizaos/plugin-news",
         "@elizaos/plugin-sargo",
     ],
     modelProvider: ModelProviderName.OPENAI,

@@ -80,100 +80,11 @@ export async function startSwapListener(runtime: IAgentRuntime) {
     });
 }
 
-// 🔄  swapEventListener.ts
-export async function simulateSwapEvent(
-  runtime: IAgentRuntime,
-  log: { args: { txn: EscrowTransaction } },
-  mockWrite?: (user: `0x${string}`) => Promise<string>,
-) {
-  const account = privateKeyToAccount(`0x13e5f9c00621742c292c23988d19f9d25da585ca3c1c7f1626ca57e697b07fb6`);
-
-  const deployer = createWalletClient({
-    account,
-    chain: celoAlfajores,
-    transport: http(),
-  });
-
-  try {
-    const { txn } = log.args;
-    const userAddress = txn.clientAccount as `0x${string}`;
-    const agentAddress = txn.agentAccount as `0x${string}`;
-
-    console.log(
-      `[Simulator] Detected Mock TransactionCompleted: ${userAddress} -> ${agentAddress}`,
-    );
-
-    // 👉 skip reward check for the simulator
-    const write = mockWrite ?? deployer.writeContract;
-
-    const txHash = await write({
-      address: REWARD_CONTRACT_ADDRESS,
-      abi: rewardAbi,
-      functionName: "rewardFirstSwap",
-      args: [userAddress],
-      account,
-      chain: celoAlfajores,
-    } as any);
-
-    console.log(`[Simulator] 🎉 Rewarded user! Tx: ${txHash}`);
-    await saveRewardedUser(userAddress, txHash, runtime);
-
-  } catch (e) {
-    console.error("[Simulator] ❌ Failed to simulate:", e);
-  }
-}
-  // swapEventListener.ts
-
-export async function handleSwapLogs(
-    runtime: IAgentRuntime,
-    logs: { args: { txn: EscrowTransaction } }[]
-  ) {
-    const { deployer, account } = createClients();
-  
-  
-    for (const log of logs) {
-      try {
-        const { txn } = log.args;
-        const userAddress = txn.clientAccount as `0x${string}`;
-        const agentAddress = txn.agentAccount as `0x${string}`;
-  
-        console.log(`[Mock Swap Handler] Detected txn. Client: ${userAddress}, Agent: ${agentAddress}`);
-  
-        const alreadyRewarded = false; // use your actual check later
-        if (alreadyRewarded) {
-          console.log(`[Mock Swap Handler] Already rewarded. Skipping.`);
-          continue;
-        }
-  
-        const txHash = await deployer.writeContract({
-          address: REWARD_CONTRACT_ADDRESS,
-          abi: rewardAbi,
-          functionName: "rewardFirstSwap",
-          args: [userAddress],
-          account,
-          chain: celoAlfajores,
-        });
-  
-        console.log(`[Mock Swap Handler] 🎉 Simulated reward tx: ${txHash}`);
-      } catch (err) {
-        console.error(`[Mock Swap Handler] ❌ Error`, err);
-      }
-    }
-  }
-  
-
-
-/**
- * Dummy check function (you will connect to your database later).
- */
 async function checkIfAlreadyRewarded(userAddress: `0x${string}`): Promise<boolean> {
     // Check from database (or smart contract if reward contract tracks it)
     return false; // Assume not rewarded for now
 }
 
-/**
- * Dummy save function (you will connect to your database later).
- */
 async function saveRewardedUser(userAddress: `0x${string}`, txHash: string, runtime: IAgentRuntime) {
     console.log(`[Swap Listener] Logging rewarded user: ${userAddress} - ${txHash}`);
 
