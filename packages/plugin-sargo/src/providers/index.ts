@@ -1,1 +1,1 @@
-export * from "./balanceProvider.ts";
+export * from "./addressProvider.ts";

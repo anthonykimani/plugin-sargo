@@ -1,6 +1,6 @@
 import { type Action, type HandlerCallback, type IAgentRuntime, type Memory, type State } from "@elizaos/core";
 import { createClients } from "../utils/helpers"
-import { BalanceProvider } from "../providers";
+import { AddressProvider } from "../providers";
 
 export const getBalanceAction: Action = {
     name: "get_wallet_balance",
@@ -14,7 +14,7 @@ export const getBalanceAction: Action = {
         const { publicClient } = createClients();
 
         // Get the provider
-        const provider = runtime.providers.find(p => p instanceof BalanceProvider);
+        const provider = runtime.providers.find(p => p instanceof AddressProvider);
         if (!provider) {
             throw new Error("Address not found");
         }

@@ -7,7 +7,7 @@ import {
     type State,
 } from "@elizaos/core";
 import { createClients } from "../utils/helpers";
-import { BalanceProvider } from "../providers";
+import { AddressProvider } from "../providers";
 import { parseAbiItem } from "viem";
 import { celoAlfajores } from "viem/chains";
 import { EscrowTransaction } from "../types";
@@ -41,9 +41,9 @@ export const rewardFirstSwapAction: Action = {
         const { publicClient, deployer, account } = createClients();
 
         // Get the provider (extracts wallet address from message)
-        const provider = runtime.providers.find(p => p instanceof BalanceProvider);
+        const provider = runtime.providers.find(p => p instanceof AddressProvider);
         if (!provider) {
-            throw new Error("BalanceProvider not found");
+            throw new Error("AddressProvider not found");
         }
 
         const address = await provider.get(runtime, message, state) as `0x${string}`;

@@ -20,8 +20,8 @@ dotenv.config();
 
 const { JYUKO_PRIVATE_KEY } = process.env;
 
-const P2P_CONTRACT_ADDRESS = process.env.P2P_CONTRACT_ADDRESS as `0x${string}`;
-const REWARD_CONTRACT_ADDRESS = process.env.REWARD_CONTRACT_ADDRESS as `0x${string}`;
+const P2P_CONTRACT_ADDRESS = process.env.SARGO_P2P_CONTRACT_ADDRESS as `0x${string}`;
+const REWARD_CONTRACT_ADDRESS = process.env.SARGO_REWARD_CONTRACT_ADDRESS as `0x${string}`;
 const CUSD_TOKEN_ADDRESS = process.env.CUSD_TOKEN_ADDRESS as `0x${string}`;
 
 const rewardAbi = [parseAbiItem("function rewardFirstSwap(address user) external")];

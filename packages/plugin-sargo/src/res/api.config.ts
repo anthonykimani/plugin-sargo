@@ -4,6 +4,7 @@ const SARGO_INTERN_NAME = process.env.SARGO_INTERN_NAME;
 
 const transactionsApiBaseUrl =
   process.env.SARGO_INTERN_TRANSACTIONS_API_BASE_URI;
+  const identityApiBaseUrl = process.env.SARGO_INTERN_IDENTITY_API_BASE_URI;
 const appBaseUrl = process.env.SARGO_INTERN_APP_BASE_URI;
 
 export const apiOptions = {
@@ -12,6 +13,7 @@ export const apiOptions = {
     name: SARGO_INTERN_NAME,
     endPoints: {
         transactions: `${transactionsApiBaseUrl}/transactions`,
+            account: `${identityApiBaseUrl}/account`,
         appBaseUrl: `${appBaseUrl}`,
     }
 }

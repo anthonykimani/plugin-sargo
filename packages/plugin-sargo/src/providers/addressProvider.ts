@@ -1,7 +1,7 @@
 import type { Provider, IAgentRuntime, Memory, State } from "@elizaos/core";
 
 
-export class BalanceProvider implements Provider {
+export class AddressProvider implements Provider {
     async get(
         _lengthruntime: IAgentRuntime,
         message: Memory,
@@ -24,8 +24,6 @@ export class BalanceProvider implements Provider {
 
                 return null;
             }
-
-            console.log(`Fetching balance for address: ${addressIdentifier}`);
 
             return addressIdentifier;
         } catch (error) {

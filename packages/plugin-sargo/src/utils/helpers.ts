@@ -14,7 +14,7 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 
-const { JYUKO_PRIVATE_KEY } = process.env;
+const { SARGO_AGENT_PRIVATE_KEY } = process.env;
 
 const RPC_HTTP  = 'https://alfajores-forno.celo-testnet.org';
 const RPC_WS    = 'wss://alfajores-forno.celo-testnet.org/ws';
@@ -25,7 +25,7 @@ export function createClients(): {
   account: any;
 }  {
   // Creates an Account from a private key.
-  const account = privateKeyToAccount(`0x${JYUKO_PRIVATE_KEY??""}`);
+  const account = privateKeyToAccount(`0x${SARGO_AGENT_PRIVATE_KEY??""}`);
 
   console.log("privateKeyToAccount", account)
 
