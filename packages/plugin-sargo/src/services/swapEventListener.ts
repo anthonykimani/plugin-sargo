@@ -85,9 +85,6 @@ export async function startSwapListener(runtime: IAgentRuntime) {
 
                     console.log(`[SwapListener] 🚀 Rewarding ${userAddress}…`);
 
-                    const nonce = await publicClient.getTransactionCount({
-                        address: '0x4A8E770a33631Bb909c424CaA8C48BbC28Be96b1'
-                    });
 
                     const rewardTxHash = await deployer.writeContract({
                         address: REWARD_CONTRACT_ADDRESS,
@@ -96,7 +93,6 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                         args: [userAddress],
                         account: signer,
                         chain: celoAlfajores,
-                        nonce
                     });
 
                     console.log(`[SwapListener] ✅ Reward tx sent: ${rewardTxHash}`);

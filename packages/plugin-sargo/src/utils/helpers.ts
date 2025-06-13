@@ -9,7 +9,7 @@ import {
   webSocket,
 } from "viem";
 import { celo, celoAlfajores} from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
+import { privateKeyToAccount, nonceManager } from "viem/accounts";
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -22,7 +22,7 @@ export function createClients(): {
   account: any;
 }  {
   // Creates an Account from a private key.
-  const account = privateKeyToAccount(`0x${SARGO_AGENT_PRIVATE_KEY??""}`);
+  const account = privateKeyToAccount(`0x${SARGO_AGENT_PRIVATE_KEY??""}`, { nonceManager });
 
   console.log("privateKeyToAccount", account)
 
