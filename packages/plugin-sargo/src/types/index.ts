@@ -32,3 +32,28 @@ export type EscrowTransaction = {
     tokenName: string;
     tokenAddress: `0x${string}`;
 };
+
+
+export type EscrowTransactionLog = {
+    id: bigint;
+    refNumber: string;
+    txType: number;
+    status: number;
+    currencyCode: string;
+    conversionRate: bigint;
+    totalAmount: bigint;
+    netAmount: bigint;
+    agentFee: bigint;
+    treasuryFee: bigint;
+    clientAccount: `0x${string}`;
+    agentAccount: `0x${string}`;
+    paymentMethod: string;
+    timestamp: bigint;
+    clientApproved: boolean;
+    agentApproved: boolean;
+    clientApprovedCancel: boolean;
+    agentApprovedCancel: boolean;
+    tokenName: string;
+    tokenAddress: `0x${string}`;
+    directApproved: boolean;
+};

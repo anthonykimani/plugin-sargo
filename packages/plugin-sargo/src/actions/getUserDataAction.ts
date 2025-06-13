@@ -95,13 +95,13 @@ export const getUserDataAction: Action = {
         [
             {
                 user: "{{user}}",
-                content: { text: "Can you fetch user info for the wallet address 0xfA1316fE4b4a572F5F701f75A97bae933a24B748" },
+                content: { text: "Can you fetch user info for the wallet address 0x965bf7e5Bd32edC6E9A6289096d51da88891B66E" },
             },
             {
                 user: "{{agent}}",
                 content: {
                     text: "",
-                    thought: "User is asking for user info for the wallet address 0xfA1316fE4b4a572F5F701f75A97bae933a24B748",
+                    thought: "User is asking for user info for the wallet address 0x965bf7e5Bd32edC6E9A6289096d51da88891B66E",
                     actions: ["GET_USER_DATA"],
                 },
             },
@@ -109,7 +109,7 @@ export const getUserDataAction: Action = {
         [
             {
                 user: "{{user}}",
-                content: { text: "What’s the user record of this wallet 0xfA1316fE4b4a572F5F701f75A97bae933a24B748...?" },
+                content: { text: "What’s the user record of this wallet 0x965bf7e5Bd32edC6E9A6289096d51da88891B66E...?" },
             },
             {
                 user: "{{agent}}",

@@ -8,16 +8,13 @@ import {
   WalletClient,
   webSocket,
 } from "viem";
-import * as chains from "viem/chains";
+import { celo, celoAlfajores} from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import * as dotenv from "dotenv";
 dotenv.config();
 
 
-const { SARGO_AGENT_PRIVATE_KEY } = process.env;
-
-const RPC_HTTP  = 'https://alfajores-forno.celo-testnet.org';
-const RPC_WS    = 'wss://alfajores-forno.celo-testnet.org/ws';
+const { SARGO_AGENT_PRIVATE_KEY, WEB_RPC } = process.env;
 
 export function createClients(): {
   publicClient: PublicClient;
@@ -29,18 +26,20 @@ export function createClients(): {
 
   console.log("privateKeyToAccount", account)
 
+    const isProduction = process.env.NODE_ENV === "production";
+
   // Creates a publicClient
   const publicClient = createPublicClient({
-    chain: chains.celoAlfajores,
-    transport: webSocket(RPC_WS),
+    chain: isProduction ? celo : celoAlfajores,
+    transport: webSocket(WEB_RPC),
   });
   
 
   // create a walletClient
   const deployer = createWalletClient({
     account: account,
-    chain: chains.celoAlfajores,
-    transport: http(RPC_HTTP),
+    chain: isProduction ? celo : celoAlfajores,
+    transport: webSocket(WEB_RPC),
   });
 
   return { publicClient: publicClient as PublicClient & { account: undefined }, deployer, account };

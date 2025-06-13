@@ -1,0 +1,11 @@
+export enum Status {
+  REQUEST,
+  PAIRED,
+  DISPUTED,
+  COMPLETED,
+  CANCELLED,
+  CLAIMED,
+  REFUNDED,
+  VOIDED,
+  CANCELLING,
+}

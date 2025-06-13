@@ -12,12 +12,12 @@ import { parseAbiItem } from "viem";
 import { celoAlfajores } from "viem/chains";
 import { EscrowTransaction } from "../types";
 import { escrowAbi } from "../utils/escrowAbi";
-
+import { TransactionType } from "../enums/TransactionType";
 
 const rewardAbi = [parseAbiItem("function rewardFirstSwap(address user) external")];
 
-const P2P_CONTRACT_ADDRESS = process.env.P2P_CONTRACT_ADDRESS as `0x${string}`;
-const REWARD_CONTRACT_ADDRESS = process.env.REWARD_CONTRACT_ADDRESS as `0x${string}`;
+const P2P_CONTRACT_ADDRESS = process.env.SARGO_P2P_CONTRACT_ADDRESS as `0x${string}`;
+const REWARD_CONTRACT_ADDRESS = process.env.SARGO_REWARD_CONTRACT_ADDRESS as `0x${string}`;
 
 export const rewardFirstSwapAction: Action = {
     name: "reward_first_swap",
@@ -32,7 +32,7 @@ export const rewardFirstSwapAction: Action = {
         );
     },
     handler: async (
-        runtime: IAgentRuntime,
+        runtime: IAgentRuntime,         
         message: Memory,
         state: State,
         _options: any,
@@ -40,84 +40,95 @@ export const rewardFirstSwapAction: Action = {
     ) => {
         const { publicClient, deployer, account } = createClients();
 
-        // Get the provider (extracts wallet address from message)
+        console.log("[Reward Debug] Initializing reward process...");
+
+        // Get provider
         const provider = runtime.providers.find(p => p instanceof AddressProvider);
         if (!provider) {
+            console.error("[Reward Debug] ❌ AddressProvider not found");
             throw new Error("AddressProvider not found");
         }
 
         const address = await provider.get(runtime, message, state) as `0x${string}`;
 
         if (!address) {
+            console.warn("[Reward Debug] ⚠️ No address found in message");
             await callback({
                 text: "👋 I couldn’t find your wallet address. Please reply with your address (starts with 0x...) so I can check your reward.",
             });
             return true;
         }
 
+        console.log(`[Reward Debug] ✅ Using address: ${address}`);
+
         try {
-            // 🧮 Step 1: Check history length
-            const historyLength = await publicClient.readContract({
+            // Get total number of transactions
+            const nextTxId = await publicClient.readContract({
                 address: P2P_CONTRACT_ADDRESS,
                 abi: escrowAbi,
-                functionName: "getAcountHistoryLength",
-                args: [address],
+                functionName: "nextTxId",
             });
 
-            console.log(`[Reward Debug] Found ${historyLength} transaction(s) for ${address}`);
+            console.log(`[Reward Debug] 📦 Contract reports ${nextTxId} transactions in total`);
 
-            if (historyLength === 0n) {
-                await callback({ text: `❌ This wallet hasn't performed any swaps yet.` });
-                console.log("[Reward Debug] No transactions found.");
-                return true;
-            }
+            let foundSwapTxn: EscrowTransaction | null = null;
 
-            // 🧾 Step 2: Get first transaction ID
-            let foundSwapTxn = null;
-
-            for (let i = 0n; i < historyLength; i++) {
-                const txnId = await publicClient.readContract({
-                    address: P2P_CONTRACT_ADDRESS,
-                    abi: escrowAbi,
-                    functionName: "acountHistory",
-                    args: [address, i],
-                });
+            // Step 2: Loop through transactions to find valid first swap
+            for (let i = 0n; i < nextTxId; i++) {
+                console.log(`[Reward Debug] 🔍 Checking Tx ID ${i}`);
 
                 const txn = await publicClient.readContract({
                     address: P2P_CONTRACT_ADDRESS,
                     abi: escrowAbi,
-                    functionName: "getTransactionById",
-                    args: [txnId],
+                    functionName: "getTx",
+                    args: [i],
                 }) as unknown as EscrowTransaction;
 
-                if (txn.txType === 2 && txn.status === 3) {
-                    foundSwapTxn = txn;
-                    break;
+                if (!txn) {
+                    console.warn(`[Reward Debug] ⚠️ No transaction returned for ID ${i}`);
+                    continue;
                 }
 
-                console.log(`[Reward Debug] Checking Txn #${txnId} — Type: ${txn.txType}, Status: ${txn.status}`);
+                console.log(`[Reward Debug] Tx ID ${txn.id} | Tx Ref ${txn.refNumber} | Client: ${txn.clientAccount} | Type: ${txn.txType} | Status: ${txn.status} |  ClientApproved: ${txn.clientApproved}, AgentApproved: ${txn.agentApproved}`);
 
+                const isClient = txn.clientAccount.toLowerCase() === address.toLowerCase();
+                const isAgent = txn.agentAccount.toLowerCase() === address.toLowerCase();
+
+                if (!isClient && !isAgent) {
+                    console.log(`[Reward Debug] Tx ID ${i} skipped: address not client or agent`);
+                    continue;
+                }
+
+                // Constants
                 const TRANSFER = 2;
                 const COMPLETED = 3;
 
-                if (txn.clientApproved && txn.agentApproved && txn.status === COMPLETED) {
+                // Check swap completion
+                if (
+                    txn.txType === TransactionType.BUY || TransactionType.SELL &&
+                    txn.status === 3 &&
+                    txn.clientApproved &&
+                    txn.agentApproved
+                ) {
                     foundSwapTxn = txn;
-                    console.log(`[Reward Debug] ✅ First completed swap found! Txn ID: ${txnId}`);
+                    console.log(`[Reward Debug] ✅ Found qualifying swap Tx ID: ${txn.id}`);
                     break;
+                } else {
+                    console.log(`[Reward Debug] ❌ Tx ID ${txn.id} not a valid completed swap`);
                 }
             }
 
-
-
             if (!foundSwapTxn) {
-                console.log("[Reward Debug] ❌ No completed swap found.");
+                console.warn("[Reward Debug] ❌ No completed swap found for this address");
                 await callback({
                     text: `⛔ This wallet hasn't completed a swap yet.`,
                 });
                 return true;
             }
 
-            // 🎁 Step 4: Reward user for their first swap
+            // Step 3: Send reward
+            console.log(`[Reward Debug] 🚀 Sending reward to ${address}...`);
+
             const txHash = await deployer.writeContract({
                 address: REWARD_CONTRACT_ADDRESS,
                 abi: rewardAbi,
@@ -127,7 +138,7 @@ export const rewardFirstSwapAction: Action = {
                 chain: celoAlfajores,
             });
 
-            console.log(`[Reward Debug] 🎉 Reward transaction sent: ${txHash}`);
+            console.log(`[Reward Debug] 🎉 Reward transaction hash: ${txHash}`);
 
             await callback({
                 text: `🎉 You've been rewarded for your first Sargo swap! Tx: https://celoscan.io/tx/${txHash}`,
@@ -141,7 +152,7 @@ export const rewardFirstSwapAction: Action = {
                 typeof error?.shortMessage === "string" &&
                 error.shortMessage.includes("User already rewarded")
             ) {
-                console.log("[Reward Debug] ⚠️ User already claimed reward.");
+                console.log("[Reward Debug] ⚠️ Reward already claimed");
                 await callback({
                     text: `✅ You've already claimed your first swap reward.`,
                 });
@@ -160,7 +171,7 @@ export const rewardFirstSwapAction: Action = {
             {
                 user: "{{user}}",
                 content: {
-                    text: "Can I claim my reward? I just did my first swap — here's my address 0xABC123...",
+                    text: "Can I claim my reward? I just did my first swap — here's my address 0x99b16591C5A11E4174F30D77F528edf122Ae5b5C",
                 },
             },
             {
@@ -221,4 +232,4 @@ export const rewardFirstSwapAction: Action = {
             }
         ]
     ] as ActionExample[][]
-} as Action
+} as Action;

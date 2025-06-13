@@ -1,0 +1,15 @@
+export enum Event {
+  TRANSACTIONINITIATED = "TransactionInitiated",
+  REQUESTACCEPTED = "RequestAccepted",
+  CLIENTCONFIRMED = "ClientConfirmed",
+  AGENTCONFIRMED = "AgentConfirmed",
+  TRANSACTIONCOMPLETED = "TransactionCompleted",
+  TRANSACTIONCANCELLING = "TransactionCancelling",
+  CLIENTCANCELAPPROVED = "ClientCancelApproved",
+  AGENTCANCELAPPROVED = "AgentCancelApproved",
+  TRANSACTIONCANCELLED = "TransactionCancelled",
+  TRANSACTIONDISPUTED = "TransactionDisputed",
+  TRANSFER = "Transfer",
+  CLAIMED = "TransactionClaimed",
+  RESOLVED = "TransactionResolved",
+}
