@@ -1,28 +1,24 @@
-import { celoAlfajores } from "viem/chains";
-import { escrowAbi } from "../utils/escrowAbi";
 import { createClients } from "../utils/helpers";
 import { type IAgentRuntime } from "@elizaos/core";
-import {
-    Address,
-    BlockTag,
-    parseAbiItem,
-    type AbiEvent,
-    type Log,
-} from "viem";
 import Http from "../shared/Http";
 import { apiOptions } from "../res/api.config";
 import { EscrowTransactionLog } from "../types";
 import * as dotenv from "dotenv";
 import { SargoEscrowAbi } from "../utils/sargoAbi";
 import { Event } from "../enums/Event";
+import { RewardSwapAbi } from "../utils/rewardSwapAbi";
 
 dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
 
-const P2P_CONTRACT_ADDRESS = process.env.SARGO_P2P_CONTRACT_ADDRESS as `0x${string}`;
-const REWARD_CONTRACT_ADDRESS = process.env.SARGO_REWARD_CONTRACT_ADDRESS as `0x${string}`;
+const isProd = process.env.NODE_ENV === "production";
 
+const P2P_CONTRACT_ADDRESS = (isProd
+    ? process.env.SARGO_P2P_MAINNET_CONTRACT_ADDRESS
+    : process.env.SARGO_P2P_TESTNET_CONTRACT_ADDRESS) as `0x${string}`;
 
-const rewardAbi = [parseAbiItem("function rewardFirstSwap(address user) external")];
+const REWARD_CONTRACT_ADDRESS = (isProd
+    ? process.env.SARGO_REWARD_MAINNET_CONTRACT_ADDRESS
+    : process.env.SARGO_REWARD_TESTNET_CONTRACT_ADDRESS) as `0x${string}`;
 
 enum Status {
     OPEN,
@@ -37,80 +33,153 @@ enum Status {
 }
 
 enum TxType {
-    BUY,      // 0
-    SELL,     // 1
-    TRANSFER, // 2 (not rewarded)
+    BUY,
+    SELL,
+    TRANSFER,
 }
+
+let listenerActive = false;
 
 export async function startSwapListener(runtime: IAgentRuntime) {
-    const { publicClient, deployer, account: signer } = createClients();
+    const maxRetries = Infinity;
+    let retryCount = 0;
 
-    console.log("[SwapListener] 🔄 Starting HTTP log poller…");
+    const run = async () => {
+        if (listenerActive) return;
+        listenerActive = true;
 
-    let lastProcessed = await publicClient.getBlockNumber();
-    console.log(`[SwapListener] ⏩ Beginning at block ${lastProcessed}`);
+        try {
+            console.log(`[SwapListener] 🔁 Starting listener attempt #${retryCount + 1}`);
+            const { publicClient, deployer, account: signer, chainId } = createClients();
 
-    console.log("Escrow address", P2P_CONTRACT_ADDRESS);
+            console.log(`[SwapListener] 🔄 Listening on ${chainId.name}…`);
+            console.log(`[SwapListener] Using Escrow: ${P2P_CONTRACT_ADDRESS}`);
+            console.log(`[SwapListener] Using Reward: ${REWARD_CONTRACT_ADDRESS}`);
 
-    publicClient.watchContractEvent({
-        address: P2P_CONTRACT_ADDRESS,
-        abi: SargoEscrowAbi,
-        eventName: Event.TRANSACTIONCOMPLETED,
-        poll: true,
-        onLogs: async (logs) => {
-            for (const log of logs) {
-                try {
-                    const { txn } = (log as any).args as { txn: EscrowTransactionLog };
+            const processedTxs = new Set<bigint>();
+            const pendingRewards = new Set<`0x${string}`>();
 
-                    console.log(
-                        `[SwapListener] 🧾 Tx ${txn.id} | Client ${txn.clientAccount} | Agent ${txn.agentAccount} | Type ${txn.txType} | Status ${txn.status} | Approvals C:${txn.clientApproved} A:${txn.agentApproved}`,
-                    );
+            const unwatch = publicClient.watchContractEvent({
+                address: P2P_CONTRACT_ADDRESS,
+                abi: SargoEscrowAbi,
+                eventName: Event.TRANSACTIONCOMPLETED,
+                poll: true,
+                onLogs: async (logs) => {
+                    for (const log of logs) {
+                        const { txn } = (log as any).args as { txn: EscrowTransactionLog };
 
-                    const isSwapType = txn.txType === TxType.BUY || txn.txType === TxType.SELL;
-                    const isCompleted =
-                        txn.status === Status.COMPLETED && txn.clientApproved && txn.agentApproved;
+                        if (processedTxs.has(txn.id)) {
+                            console.log(`[SwapListener] 🛑 Skipping duplicate Tx ${txn.id}`);
+                            continue;
+                        }
+                        processedTxs.add(txn.id);
 
-                    if (!isSwapType || !isCompleted) {
-                        console.log("[SwapListener] ⏭️ Not an eligible completed swap");
-                        continue;
+                        console.log(
+                            `[SwapListener] 🧾 Tx ${txn.id} | Client ${txn.clientAccount} | Type ${txn.txType} | Status ${txn.status} | Approvals C:${txn.clientApproved} A:${txn.agentApproved}`,
+                        );
+
+                        const isSwap = txn.txType === TxType.BUY || txn.txType === TxType.SELL;
+                        const isCompleted =
+                            txn.status === Status.COMPLETED &&
+                            txn.clientApproved &&
+                            txn.agentApproved;
+
+                        if (!isSwap || !isCompleted) {
+                            console.log("[SwapListener] ⏭️ Skipping non-completed swap");
+                            continue;
+                        }
+
+                        const userAddress = txn.clientAccount as `0x${string}`;
+
+                        if (pendingRewards.has(userAddress)) {
+                            console.log(`[SwapListener] ⏭️ ${userAddress} reward already in progress`);
+                            continue;
+                        }
+
+                        if (await checkIfAlreadyRewarded(userAddress)) {
+                            console.log(`[SwapListener] ⏭️ ${userAddress} already rewarded`);
+                            continue;
+                        }
+
+                        pendingRewards.add(userAddress);
+                        console.log(`[SwapListener] 🎁 Rewarding ${userAddress}...`);
+
+                        // const rawNonce = await publicClient.getTransactionCount({
+                        //     address: signer.address,
+                        //     blockTag: "latest", // not pending, so we don't include mempool txs
+                        // });
+
+                        // const adjustedNonce = rawNonce + 1;
+
+                        try {
+                            const rewardTxHash = await deployer.writeContract({
+                                address: REWARD_CONTRACT_ADDRESS,
+                                abi: RewardSwapAbi,
+                                functionName: "rewardFirstSwap",
+                                args: [userAddress],
+                                account: signer,
+                                chain: chainId
+                            });
+
+                            console.log(`[SwapListener] ✅ Reward sent: ${rewardTxHash}`);
+
+                            const transaction = await publicClient.waitForTransactionReceipt(
+                                { hash: rewardTxHash }
+                            )
+
+                            console.log("Transaction Details: ", transaction.status, transaction.transactionHash, transaction.blockNumber )
+
+                            const tx = await publicClient.getTransaction({ hash: rewardTxHash });
+                            if (!tx) {
+                                console.warn("⚠️ Transaction was not propagated or was dropped.");
+                            }
+                            // await saveRewardedUser(userAddress, rewardTxHash, runtime);
+                        } catch (err) {
+                            console.error("[SwapListener] ❌ Error:", err);
+                        } finally {
+                            pendingRewards.delete(userAddress);
+                        }
                     }
+                },
+                onError: (err) => {
+                    console.error("[SwapListener] 🚨 Watch error:", err);
+                    unwatch(); // Stop this listener
+                    listenerActive = false;
 
-                    const userAddress = txn.clientAccount as `0x${string}`;
-                    const agentAddress = txn.agentAccount as `0x${string}`;
+                    retryCount++;
+                    const delay = Math.min(5000 * retryCount, 60000);
+                    console.log(`[SwapListener] ⏳ Restarting listener in ${delay / 1000}s...`);
+                    setTimeout(run, delay);
+                },
+            });
+        } catch (error) {
+            console.error("[SwapListener] 🚨 Listener crashed:", error);
+            listenerActive = false;
 
-                    if (await checkIfAlreadyRewarded(userAddress)) {
-                        console.log(`[SwapListener] ⏭️ ${userAddress} already rewarded`);
-                        continue;
-                    }
+            retryCount++;
+            const delay = Math.min(5000 * retryCount, 60000);
+            console.log(`[SwapListener] ⏳ Restarting listener in ${delay / 1000}s...`);
+            setTimeout(run, delay);
+        }
+    };
 
-                    console.log(`[SwapListener] 🚀 Rewarding ${userAddress}…`);
-
-
-                    const rewardTxHash = await deployer.writeContract({
-                        address: REWARD_CONTRACT_ADDRESS,
-                        abi: rewardAbi,
-                        functionName: "rewardFirstSwap",
-                        args: [userAddress],
-                        account: signer,
-                        chain: celoAlfajores,
-                    });
-
-                    console.log(`[SwapListener] ✅ Reward tx sent: ${rewardTxHash}`);
-                    // await saveRewardedUser(userAddress, rewardTxHash, runtime);
-                } catch (error) {
-                    console.error(`[Swap Listener] ❌ Error processing TransactionCompleted log`, error);
-                }
-            }
-        },
-        onError: (err) => console.error('[SwapListener] watch error', err),
-    });
-
+    run();
 }
 
-
 async function checkIfAlreadyRewarded(userAddress: `0x${string}`): Promise<boolean> {
-    // TODO: real check (contract call or DB query)
-    return false;
+    const { publicClient } = createClients();
+
+    try {
+        return (await publicClient.readContract({
+            address: REWARD_CONTRACT_ADDRESS,
+            abi: RewardSwapAbi,
+            functionName: "rewarded",
+            args: [userAddress],
+        })) as boolean;
+    } catch (err) {
+        console.error(`[RewardCheck] ❌ Could not read reward status for ${userAddress}`, err);
+        return false;
+    }
 }
 
 async function saveRewardedUser(userAddress: `0x${string}`, txHash: string, runtime: IAgentRuntime) {
@@ -127,7 +196,7 @@ class SargoRewardService {
             userId: userAddress,
             agentId: "agent-id",
             content: {
-                text: `User ${userAddress} was rewarded for first swap! TxHash: ${txHash}`,
+                text: `🎉 User ${userAddress} was rewarded. Tx: ${txHash}`,
             },
             roomId: "roomId",
         };

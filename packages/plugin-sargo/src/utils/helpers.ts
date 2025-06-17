@@ -1,46 +1,62 @@
 import {
-  toHex,
   createPublicClient,
-  http,
   createWalletClient,
-  formatEther,
+  http,
+  webSocket,
   PublicClient,
   WalletClient,
-  webSocket,
 } from "viem";
-import { celo, celoAlfajores} from "viem/chains";
+import { celo, celoAlfajores } from "viem/chains";
 import { privateKeyToAccount, nonceManager } from "viem/accounts";
 import * as dotenv from "dotenv";
-dotenv.config();
+dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
 
+const {
+  SARGO_AGENT_PRIVATE_KEY,
+  CELO_MAINNET_RPC,
+  CELO_TESTNET_RPC,
+  NODE_ENV,
+} = process.env;
 
-const { SARGO_AGENT_PRIVATE_KEY, WEB_RPC } = process.env;
+if (!SARGO_AGENT_PRIVATE_KEY) {
+  throw new Error("Missing .env: SARGO_AGENT_PRIVATE_KEY");
+}
 
-export function createClients(): {
+export function createClients(options?: { network?: "mainnet" | "testnet" }): {
   publicClient: PublicClient;
   deployer: WalletClient;
   account: any;
-}  {
-  // Creates an Account from a private key.
-  const account = privateKeyToAccount(`0x${SARGO_AGENT_PRIVATE_KEY??""}`, { nonceManager });
+  chainId: typeof celo | typeof celoAlfajores;
+} {
+  const isMainnet =
+    options?.network === "mainnet" || NODE_ENV === "production";
 
-  console.log("privateKeyToAccount", account)
+  const chainId = isMainnet ? celo : celoAlfajores;
+  const rpcUrl = isMainnet ? CELO_MAINNET_RPC : CELO_TESTNET_RPC;
 
-    const isProduction = process.env.NODE_ENV === "production";
+  if (!rpcUrl) {
+    throw new Error(
+      `Missing .env value for ${isMainnet ? "CELO_MAINNET_RPC" : "CELO_TESTNET_RPC"}`
+    );
+  }
 
-  // Creates a publicClient
+  const account = privateKeyToAccount(`0x${SARGO_AGENT_PRIVATE_KEY}`);
+
   const publicClient = createPublicClient({
-    chain: isProduction ? celo : celoAlfajores,
-    transport: webSocket(WEB_RPC),
+    chain: chainId,
+    transport: webSocket(rpcUrl),
   });
-  
 
-  // create a walletClient
   const deployer = createWalletClient({
-    account: account,
-    chain: isProduction ? celo : celoAlfajores,
-    transport: webSocket(WEB_RPC),
+    account,
+    chain: chainId,
+    transport: http(),
   });
 
-  return { publicClient: publicClient as PublicClient & { account: undefined }, deployer, account };
+  return {
+    publicClient: publicClient as PublicClient & { account: undefined },
+    deployer,
+    account,
+    chainId,
+  };
 }
