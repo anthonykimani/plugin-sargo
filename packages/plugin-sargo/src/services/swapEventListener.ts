@@ -56,10 +56,13 @@ export async function startSwapListener(runtime: IAgentRuntime) {
             console.log(`[SwapListener] Using Escrow: ${P2P_CONTRACT_ADDRESS}`);
             console.log(`[SwapListener] Using Reward: ${REWARD_CONTRACT_ADDRESS}`);
 
+            retryCount = 0;
+
             const processedTxs = new Set<bigint>();
             const pendingRewards = new Set<`0x${string}`>();
 
-            const unwatch = publicClient.watchContractEvent({
+            let unwatch: () => void = () => { };
+            unwatch = publicClient.watchContractEvent({
                 address: P2P_CONTRACT_ADDRESS,
                 abi: SargoEscrowAbi,
                 eventName: Event.TRANSACTIONCOMPLETED,
@@ -75,7 +78,7 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                         processedTxs.add(txn.id);
 
                         console.log(
-                            `[SwapListener] 🧾 Tx ${txn.id} | Client ${txn.clientAccount} | Type ${txn.txType} | Status ${txn.status} | Approvals C:${txn.clientApproved} A:${txn.agentApproved}`,
+                            `[SwapListener] 🧾 Tx ${txn.id} | Client ${txn.clientAccount} | Type ${txn.txType} | Status ${txn.status} | Approvals C:${txn.clientApproved} A:${txn.agentApproved}`
                         );
 
                         const isSwap = txn.txType === TxType.BUY || txn.txType === TxType.SELL;
@@ -104,13 +107,6 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                         pendingRewards.add(userAddress);
                         console.log(`[SwapListener] 🎁 Rewarding ${userAddress}...`);
 
-                        // const rawNonce = await publicClient.getTransactionCount({
-                        //     address: signer.address,
-                        //     blockTag: "latest", // not pending, so we don't include mempool txs
-                        // });
-
-                        // const adjustedNonce = rawNonce + 1;
-
                         try {
                             const rewardTxHash = await deployer.writeContract({
                                 address: REWARD_CONTRACT_ADDRESS,
@@ -118,21 +114,27 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                                 functionName: "rewardFirstSwap",
                                 args: [userAddress],
                                 account: signer,
-                                chain: chainId
+                                chain: chainId,
                             });
 
                             console.log(`[SwapListener] ✅ Reward sent: ${rewardTxHash}`);
 
-                            const transaction = await publicClient.waitForTransactionReceipt(
-                                { hash: rewardTxHash }
-                            )
+                            const receipt = await publicClient.waitForTransactionReceipt({
+                                hash: rewardTxHash,
+                            });
 
-                            console.log("Transaction Details: ", transaction.status, transaction.transactionHash, transaction.blockNumber )
+                            console.log(
+                                "Transaction Details:",
+                                receipt.status,
+                                receipt.transactionHash,
+                                receipt.blockNumber
+                            );
 
                             const tx = await publicClient.getTransaction({ hash: rewardTxHash });
                             if (!tx) {
                                 console.warn("⚠️ Transaction was not propagated or was dropped.");
                             }
+
                             // await saveRewardedUser(userAddress, rewardTxHash, runtime);
                         } catch (err) {
                             console.error("[SwapListener] ❌ Error:", err);
@@ -143,19 +145,16 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                 },
                 onError: (err) => {
                     console.error("[SwapListener] 🚨 Watch error:", err);
-                    unwatch(); // Stop this listener
                     listenerActive = false;
-
-                    retryCount++;
-                    const delay = Math.min(5000 * retryCount, 60000);
-                    console.log(`[SwapListener] ⏳ Restarting listener in ${delay / 1000}s...`);
-                    setTimeout(run, delay);
+                    unwatch();
                 },
             });
         } catch (error) {
-            console.error("[SwapListener] 🚨 Listener crashed:", error);
+            console.error("[SwapListener] 💥 Listener crashed:", error);
             listenerActive = false;
+        }
 
+        if (!listenerActive) {
             retryCount++;
             const delay = Math.min(5000 * retryCount, 60000);
             console.log(`[SwapListener] ⏳ Restarting listener in ${delay / 1000}s...`);
