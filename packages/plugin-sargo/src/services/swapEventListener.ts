@@ -48,21 +48,17 @@ export async function startSwapListener(runtime: IAgentRuntime) {
         if (listenerActive) return;
         listenerActive = true;
 
+        const { publicClient, deployer, account: signer, chainId } = createClients();
+
+        console.log(`[SwapListener] 🔄 Listening on ${chainId.name}…`);
+        console.log(`[SwapListener] Using Escrow: ${P2P_CONTRACT_ADDRESS}`);
+        console.log(`[SwapListener] Using Reward: ${REWARD_CONTRACT_ADDRESS}`);
+
+        const processedTxs = new Set<bigint>();
+        const pendingRewards = new Set<`0x${string}`>();
+
         try {
-            console.log(`[SwapListener] 🔁 Starting listener attempt #${retryCount + 1}`);
-            const { publicClient, deployer, account: signer, chainId } = createClients();
-
-            console.log(`[SwapListener] 🔄 Listening on ${chainId.name}…`);
-            console.log(`[SwapListener] Using Escrow: ${P2P_CONTRACT_ADDRESS}`);
-            console.log(`[SwapListener] Using Reward: ${REWARD_CONTRACT_ADDRESS}`);
-
-            retryCount = 0;
-
-            const processedTxs = new Set<bigint>();
-            const pendingRewards = new Set<`0x${string}`>();
-
-            let unwatch: () => void = () => { };
-            unwatch = publicClient.watchContractEvent({
+            await publicClient.watchContractEvent({
                 address: P2P_CONTRACT_ADDRESS,
                 abi: SargoEscrowAbi,
                 eventName: Event.TRANSACTIONCOMPLETED,
@@ -119,9 +115,7 @@ export async function startSwapListener(runtime: IAgentRuntime) {
 
                             console.log(`[SwapListener] ✅ Reward sent: ${rewardTxHash}`);
 
-                            const receipt = await publicClient.waitForTransactionReceipt({
-                                hash: rewardTxHash,
-                            });
+                            const receipt = await publicClient.waitForTransactionReceipt({ hash: rewardTxHash });
 
                             console.log(
                                 "Transaction Details:",
@@ -131,30 +125,52 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                             );
 
                             const tx = await publicClient.getTransaction({ hash: rewardTxHash });
-                            if (!tx) {
-                                console.warn("⚠️ Transaction was not propagated or was dropped.");
-                            }
+                            if (!tx) console.warn("⚠️ Transaction was not propagated or was dropped.");
 
                             // await saveRewardedUser(userAddress, rewardTxHash, runtime);
                         } catch (err) {
-                            console.error("[SwapListener] ❌ Error:", err);
+                            console.error("[SwapListener] ❌ Reward error:", err);
                         } finally {
                             pendingRewards.delete(userAddress);
                         }
                     }
                 },
                 onError: (err) => {
-                    console.error("[SwapListener] 🚨 Watch error:", err);
+                    if (
+                        typeof err === "object" &&
+                        err !== null &&
+                        ("code" in err || "message" in err || "shortMessage" in err)
+                    ) {
+                        const error = err as { code?: number; message?: string; shortMessage?: string };
+                        console.error("[SwapListener] 🚨 Watch error:", error);
+
+                        const isRecoverable =
+                            error.code === -32000 ||
+                            (typeof error.message === "string" && error.message.toLowerCase().includes("filter not found")) ||
+                            (typeof error.shortMessage === "string" && error.shortMessage.toLowerCase().includes("filter not found"));
+
+                        if (isRecoverable) {
+                            console.warn("[SwapListener] 🔁 Filter lost — restarting listener...");
+                        } else {
+                            console.warn("[SwapListener] ❌ Unrecoverable error — shutting down listener...");
+                        }
+                    } else {
+                        console.error("[SwapListener] 🚨 Unknown error shape:", err);
+                    }
+
                     listenerActive = false;
-                    unwatch();
+
+                    retryCount++;
+                    const delay = Math.min(5000 * retryCount, 60000);
+                    console.log(`[SwapListener] ⏳ Restarting listener in ${delay / 1000}s...`);
+                    setTimeout(run, delay);
                 },
+
             });
         } catch (error) {
             console.error("[SwapListener] 💥 Listener crashed:", error);
             listenerActive = false;
-        }
 
-        if (!listenerActive) {
             retryCount++;
             const delay = Math.min(5000 * retryCount, 60000);
             console.log(`[SwapListener] ⏳ Restarting listener in ${delay / 1000}s...`);
