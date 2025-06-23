@@ -1,3 +1,6 @@
+import * as dotenv from "dotenv";
+dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
+
 import {
   createPublicClient,
   createWalletClient,
@@ -7,19 +10,18 @@ import {
   WalletClient,
 } from "viem";
 import { celo, celoAlfajores } from "viem/chains";
-import { privateKeyToAccount, nonceManager } from "viem/accounts";
-import * as dotenv from "dotenv";
-dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
+import { privateKeyToAccount } from "viem/accounts";
 
 const {
   SARGO_AGENT_PRIVATE_KEY,
-  CELO_MAINNET_RPC,
-  CELO_TESTNET_RPC,
+  CELO_RPC,
   NODE_ENV,
+  SARGO_P2P_MAINNET_CONTRACT_ADDRESS,
+  SARGO_REWARD_MAINNET_CONTRACT_ADDRESS
 } = process.env;
 
 if (!SARGO_AGENT_PRIVATE_KEY) {
-  throw new Error("Missing .env: SARGO_AGENT_PRIVATE_KEY");
+  throw new Error(`Missing .env.${NODE_ENV}: SARGO_AGENT_PRIVATE_KEY`);
 }
 
 export function createClients(options?: { network?: "mainnet" | "testnet" }): {
@@ -28,16 +30,18 @@ export function createClients(options?: { network?: "mainnet" | "testnet" }): {
   account: any;
   chainId: typeof celo | typeof celoAlfajores;
 } {
-  const isMainnet =
-    options?.network === "mainnet" || NODE_ENV === "production";
-
+  const isMainnet = NODE_ENV === "production";
   const chainId = isMainnet ? celo : celoAlfajores;
-  const rpcUrl = isMainnet ? CELO_MAINNET_RPC : CELO_TESTNET_RPC;
+  const rpcUrl = CELO_RPC;
+
+  console.log("isMainnet", isMainnet);
+  console.log("ChainId:", chainId.id);
+  console.log("rpcUrl:", rpcUrl);
+  console.log("Escrow Address:", SARGO_P2P_MAINNET_CONTRACT_ADDRESS);
+  console.log("Reward Address:", SARGO_REWARD_MAINNET_CONTRACT_ADDRESS);
 
   if (!rpcUrl) {
-    throw new Error(
-      `Missing .env value for ${isMainnet ? "CELO_MAINNET_RPC" : "CELO_TESTNET_RPC"}`
-    );
+    throw new Error(`Missing CELO_RPC in .env.${NODE_ENV}`);
   }
 
   const account = privateKeyToAccount(`0x${SARGO_AGENT_PRIVATE_KEY}`);
