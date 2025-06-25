@@ -47,9 +47,9 @@ export async function startSwapListener(runtime: IAgentRuntime) {
         if (listenerActive) return;
         listenerActive = true;
 
-        const rewardedUser = '0x2cB513bAf331C28F7a8B517722993B7deF5Db601' as `0x${string}`
+        const rewardedUser = '0xdAB5f5b63e3a9A3C863e2942d2585d8820C20907' as `0x${string}`
 
-        // getRewardedTxnId(180n);
+        // getRewardedTxnId(2082n);
         // getRewardedUser(rewardedUser);
         // getAllRewardedEvents()
 
@@ -83,39 +83,51 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                             `[SwapListener] 🧾 Tx ${txn.id} | Client ${txn.clientAccount} | Type ${txn.txType} | Status ${txn.status} | Approvals C:${txn.clientApproved} A:${txn.agentApproved}`
                         );
 
-                        const isSwap = txn.txType === TxType.BUY || txn.txType === TxType.SELL;
+                        const buySwap = txn.txType === TxType.BUY;
+                        const sellSwap = txn.txType === TxType.SELL;
+
                         const isCompleted =
                             txn.status === Status.COMPLETED &&
                             txn.clientApproved &&
                             txn.agentApproved;
 
-                        if (!isSwap || !isCompleted) {
+                        if (!isCompleted) {
                             console.log("[SwapListener] ⏭️ Skipping non-completed swap");
                             continue;
                         }
 
-                        const userAddress = txn.clientAccount as `0x${string}`;
+                        const rewardAddress = buySwap
+                            ? (txn.clientAccount as `0x${string}`)
+                            : sellSwap
+                                ? (txn.agentAccount as `0x${string}`)
+                                : null;
+
+                        if (!rewardAddress) {
+                            console.log(`[SwapListener] ⚠️ No valid reward address for txType: ${txn.txType}`);
+                            continue;
+                        }
+
                         const txnId = txn.id;
 
-                        if (pendingRewards.has(userAddress)) {
-                            console.log(`[SwapListener] ⏭️ ${userAddress} reward already in progress`);
+                        if (pendingRewards.has(rewardAddress)) {
+                            console.log(`[SwapListener] ⏭️ ${rewardAddress} reward already in progress`);
                             continue;
                         }
 
-                        if (await checkIfAlreadyRewarded(userAddress)) {
-                            console.log(`[SwapListener] ⏭️ ${userAddress} already rewarded`);
+                        if (await checkIfAlreadyRewarded(rewardAddress)) {
+                            console.log(`[SwapListener] ⏭️ ${rewardAddress} already rewarded`);
                             continue;
                         }
 
-                        pendingRewards.add(userAddress);
-                        console.log(`[SwapListener] 🎁 Rewarding ${userAddress}...`);
+                        pendingRewards.add(rewardAddress);
+                        console.log(`[SwapListener] 🎁 Rewarding ${rewardAddress}...`);
 
                         try {
                             const rewardTxHash = await deployer.writeContract({
                                 address: REWARD_CONTRACT_ADDRESS,
                                 abi: RewardSwapAbi,
                                 functionName: "rewardFirstSwap",
-                                args: [userAddress, txnId],
+                                args: [rewardAddress, txnId],
                                 account: signer,
                                 chain: chainId,
                             });
@@ -134,11 +146,11 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                             const tx = await publicClient.getTransaction({ hash: rewardTxHash });
                             if (!tx) console.warn("⚠️ Transaction was not propagated or was dropped.");
 
-                            // await saveRewardedUser(userAddress, rewardTxHash, runtime);
+                            // await saveRewardedUser(rewardAddress, rewardTxHash, runtime);
                         } catch (err) {
                             console.error("[SwapListener] ❌ Reward error:", err);
                         } finally {
-                            pendingRewards.delete(userAddress);
+                            pendingRewards.delete(rewardAddress);
                         }
                     }
                 },
