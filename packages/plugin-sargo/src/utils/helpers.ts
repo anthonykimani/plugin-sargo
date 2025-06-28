@@ -34,12 +34,6 @@ export function createClients(options?: { network?: "mainnet" | "testnet" }): {
   const chainId = isMainnet ? celo : celoAlfajores;
   const rpcUrl = CELO_RPC;
 
-  console.log("isMainnet", isMainnet);
-  console.log("ChainId:", chainId.id);
-  console.log("rpcUrl:", rpcUrl);
-  console.log("Escrow Address:", SARGO_P2P_MAINNET_CONTRACT_ADDRESS);
-  console.log("Reward Address:", SARGO_REWARD_MAINNET_CONTRACT_ADDRESS);
-
   if (!rpcUrl) {
     throw new Error(`Missing CELO_RPC in .env.${NODE_ENV}`);
   }

@@ -38,6 +38,18 @@ enum TxType {
     TRANSFER,
 }
 
+interface IReward {
+    txId: number,
+    userAccount: string,
+    amount: number,
+    tokenName: string,
+    timestamp: number,
+    rewardType: string,
+    rewardStage: string,
+    contractAddress: string,
+    eventName: string
+}
+
 let listenerActive = false;
 
 export async function startSwapListener(runtime: IAgentRuntime) {
@@ -54,6 +66,7 @@ export async function startSwapListener(runtime: IAgentRuntime) {
         // getAllRewardedEvents()
 
         const { publicClient, deployer, account: signer, chainId } = createClients();
+        const rewardService = new SargoRewardService(runtime);
 
         console.log(`[SwapListener] 🔄 Listening on ${chainId.name}…`);
         console.log(`[SwapListener] Using Escrow: ${P2P_CONTRACT_ADDRESS}`);
@@ -63,8 +76,7 @@ export async function startSwapListener(runtime: IAgentRuntime) {
         const pendingRewards = new Set<`0x${string}`>();
 
         try {
-
-            await publicClient.watchContractEvent({
+            publicClient.watchContractEvent({
                 address: P2P_CONTRACT_ADDRESS,
                 abi: SargoEscrowAbi,
                 eventName: Event.TRANSACTIONCOMPLETED,
@@ -80,7 +92,7 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                         processedTxs.add(txn.id);
 
                         console.log(
-                            `[SwapListener] 🧾 Tx ${txn.id} | Client ${txn.clientAccount} | Type ${txn.txType} | Status ${txn.status} | Approvals C:${txn.clientApproved} A:${txn.agentApproved}`
+                            `[SwapListener] 🧾 Swap Event Transaction Completed  Tx ${txn.id} | Client ${txn.clientAccount} | Type ${txn.txType} | Status ${txn.status} | Approvals Client:${txn.clientApproved} ✅ and Agent:${txn.agentApproved} ✅`
                         );
 
                         const buySwap = txn.txType === TxType.BUY;
@@ -114,15 +126,21 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                             continue;
                         }
 
-                        if (await checkIfAlreadyRewarded(rewardAddress)) {
+                        pendingRewards.add(rewardAddress);
+
+                        const isClientAccountRewarded = await rewardService.checkIfAlreadyRewarded(rewardAddress);
+
+                        console.log(`Is Client Account Rewarded? ${isClientAccountRewarded}`)
+
+                        if (isClientAccountRewarded) {
                             console.log(`[SwapListener] ⏭️ ${rewardAddress} already rewarded`);
+                            pendingRewards.delete(rewardAddress);
                             continue;
                         }
 
-                        pendingRewards.add(rewardAddress);
-                        console.log(`[SwapListener] 🎁 Rewarding ${rewardAddress}...`);
-
                         try {
+                            console.log(`[SwapListener] 🎁 Rewarding ${rewardAddress}...`);
+
                             const rewardTxHash = await deployer.writeContract({
                                 address: REWARD_CONTRACT_ADDRESS,
                                 abi: RewardSwapAbi,
@@ -142,6 +160,8 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                                 receipt.transactionHash,
                                 receipt.blockNumber
                             );
+
+                            console.log(`📨 Transaction Details: Receipt Status: 🌡️  ${receipt.status} Receipt BlockNumber: 🗃️  ${receipt.blockNumber} Receipt TransactionHash: 💸 ${receipt.transactionHash}`)
 
                             const tx = await publicClient.getTransaction({ hash: rewardTxHash });
                             if (!tx) console.warn("⚠️ Transaction was not propagated or was dropped.");
@@ -206,6 +226,18 @@ export async function startSwapListener(runtime: IAgentRuntime) {
 
                         // Optionally save to DB
                         // await saveRewardedUser(user, log.transactionHash, runtime);
+                        await rewardService.getRewardedTxnId(txnId);
+                        await rewardService.saveReward({
+                            txId: Number(txnId),
+                            userAccount: user,
+                            amount: Number(amount),
+                            tokenName: 'cUSD',
+                            timestamp: Number(timestamp),
+                            rewardType: "swap",
+                            rewardStage: "acquisition",
+                            contractAddress: `${REWARD_CONTRACT_ADDRESS}`,
+                            eventName: "Rewarded"
+                        });
                     }
                 },
                 onError: (err) => {
@@ -227,80 +259,6 @@ export async function startSwapListener(runtime: IAgentRuntime) {
 
     run();
 }
-
-async function checkIfAlreadyRewarded(userAddress: `0x${string}`): Promise<boolean> {
-    const { publicClient } = createClients();
-
-    try {
-        return (await publicClient.readContract({
-            address: REWARD_CONTRACT_ADDRESS,
-            abi: RewardSwapAbi,
-            functionName: "rewarded",
-            args: [userAddress],
-        })) as boolean;
-    } catch (err) {
-        console.error(`[RewardCheck] ❌ Could not read reward status for ${userAddress}`, err);
-        return false;
-    }
-}
-
-async function getRewardedTxnId(txnId: BigInt) {
-    const { publicClient } = createClients();
-
-    const logs = await publicClient.getContractEvents({
-        abi: RewardSwapAbi,
-        address: REWARD_CONTRACT_ADDRESS,
-        eventName: 'Rewarded',
-        args: {
-            txnId: txnId,
-        },
-        fromBlock: "earliest",
-        toBlock: "latest"
-    })
-
-    console.log('getRewardedTxnId:', logs)
-    return logs
-}
-
-async function getRewardedUser(user: `0x${string}`) {
-    const { publicClient } = createClients();
-
-    const logs = await publicClient.getContractEvents({
-        abi: RewardSwapAbi,
-        address: REWARD_CONTRACT_ADDRESS,
-        eventName: 'Rewarded',
-        args: {
-            user: user,
-        },
-        fromBlock: "earliest",
-        toBlock: "latest"
-    })
-
-    console.log('getRewardedUser:', logs)
-    return logs
-}
-
-async function getAllRewardedEvents() {
-    const { publicClient } = createClients();
-
-    const logs = await publicClient.getContractEvents({
-        abi: RewardSwapAbi,
-        address: REWARD_CONTRACT_ADDRESS,
-        eventName: 'Rewarded',
-        fromBlock: "earliest",
-        toBlock: "latest"
-    })
-
-    console.log('getAllRewardedEvents:', logs)
-    return logs
-}
-
-async function saveRewardedUser(userAddress: `0x${string}`, txHash: string, runtime: IAgentRuntime) {
-    const rewardService = new SargoRewardService(runtime);
-    await rewardService.saveToElizaMemory(userAddress, txHash);
-    await rewardService.saveReward({ userAddress, txHash });
-}
-
 class SargoRewardService {
     constructor(private runtime: IAgentRuntime) { }
 
@@ -316,29 +274,90 @@ class SargoRewardService {
         await this.runtime.messageManager.createMemory(memory as any);
     }
 
-    async saveReward(req: { userAddress: `0x${string}`; txHash: string }) {
+    async saveReward(req: IReward) {
         const _req = { ...req, url: apiOptions.endPoints.appBaseUrl };
-        return Http.post(`${apiOptions.endPoints.transactions}/rewards/add`, _req);
+        return Http.post(`${apiOptions.endPoints.rewards}/add`, _req);
     }
 
 
     async saveAllRewards(req: { userAddress: `0x${string}`; txHash: string }) {
         const _req = { ...req, url: apiOptions.endPoints.appBaseUrl };
-        return Http.post(`${apiOptions.endPoints.transactions}/rewards/`, _req);
+        return Http.post(`${apiOptions.endPoints.rewards}`, _req);
     }
 
     async getRewardByUser(req: { userAddress: `0x${string}`; txHash: string }) {
         const _req = { ...req, url: apiOptions.endPoints.appBaseUrl };
-        return Http.post(`${apiOptions.endPoints.transactions}/rewards/user`, _req);
+        return Http.post(`${apiOptions.endPoints.rewards}/user`, _req);
     }
 
     async getRewardByTxId(req: { userAddress: `0x${string}`; txHash: string }) {
         const _req = { ...req, url: apiOptions.endPoints.appBaseUrl };
-        return Http.post(`${apiOptions.endPoints.transactions}/rewards/tx`, _req);
+        return Http.post(`${apiOptions.endPoints.rewards}/tx`, _req);
     }
 
     async getAllRewards(req: { userAddress: `0x${string}`; txHash: string }) {
         const _req = { ...req, url: apiOptions.endPoints.appBaseUrl };
-        return Http.post(`${apiOptions.endPoints.transactions}/rewards/`, _req);
+        return Http.post(`${apiOptions.endPoints.rewards}`, _req);
+    }
+
+    async checkIfAlreadyRewarded(userAddress: `0x${string}`): Promise<boolean> {
+        const { publicClient } = createClients();
+
+        try {
+            return (await publicClient.readContract({
+                address: REWARD_CONTRACT_ADDRESS,
+                abi: RewardSwapAbi,
+                functionName: "rewarded",
+                args: [userAddress],
+            })) as boolean;
+        } catch (err) {
+            console.error(`[RewardCheck] ❌ Could not read reward status for ${userAddress}`, err);
+            return false;
+        }
+    }
+
+    async getRewardedTxnId(txnId: BigInt) {
+        const { publicClient } = createClients();
+
+        const logs = await publicClient.getContractEvents({
+            abi: RewardSwapAbi,
+            address: REWARD_CONTRACT_ADDRESS,
+            eventName: 'Rewarded',
+            args: {
+                txnId: txnId,
+            }
+        })
+
+        console.log('getRewardedTxnId:', logs)
+        return logs
+    }
+
+    async getRewardedUser(user: `0x${string}`) {
+        const { publicClient } = createClients();
+
+        const logs = await publicClient.getContractEvents({
+            abi: RewardSwapAbi,
+            address: REWARD_CONTRACT_ADDRESS,
+            eventName: 'Rewarded',
+            args: {
+                user: user,
+            },
+        })
+
+        console.log('getRewardedUser:', logs)
+        return logs
+    }
+
+    async getAllRewardedEvents() {
+        const { publicClient } = createClients();
+
+        const logs = await publicClient.getContractEvents({
+            abi: RewardSwapAbi,
+            address: REWARD_CONTRACT_ADDRESS,
+            eventName: 'Rewarded',
+        })
+
+        console.log('getAllRewardedEvents:', logs)
+        return logs
     }
 }
