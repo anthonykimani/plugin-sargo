@@ -1,7 +1,7 @@
 import { type Action, type HandlerCallback, type IAgentRuntime, type Memory, type State } from "@elizaos/core";
 import { AUTH, IAuth } from "../interfaces/IAuth";
 import { IResponse } from "../interfaces/IResponse";
-import { getByAddress } from "../utils/AccountService";
+import { getByAddress } from "../controllers/AccountController";
 import { AddressProvider } from "../providers";
 
 export const getUserDataAction: Action = {

@@ -10,7 +10,7 @@ import { createClients } from "../utils/helpers";
 import { AddressProvider } from "../providers";
 import { parseAbiItem } from "viem";
 import { EscrowTransaction } from "../types";
-import { escrowAbi } from "../utils/escrowAbi";
+import { escrowAbi } from "../abis/escrowAbi";
 import { TransactionType } from "../enums/TransactionType";
 import * as dotenv from "dotenv";
 
