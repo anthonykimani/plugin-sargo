@@ -50,9 +50,8 @@ export class SargoRewardService {
         return Http.post(`${apiOptions.endPoints.rewards}/tx`, _req);
     }
 
-    async getAllRewards(req: IReward) {
-        const _req = { ...req, url: apiOptions.endPoints.appBaseUrl };
-        return Http.post(`${apiOptions.endPoints.rewards}`, _req);
+    async getAllRewards() {
+        return await Http.post(`${apiOptions.endPoints.rewards}`, {});
     }
 
     async checkIfAlreadyRewarded(userAddress: `0x${string}`): Promise<boolean> {

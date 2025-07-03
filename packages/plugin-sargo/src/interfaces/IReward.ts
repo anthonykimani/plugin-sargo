@@ -9,3 +9,4 @@ export interface IReward {
     contractAddress: string,
     eventName: string
 }
+
