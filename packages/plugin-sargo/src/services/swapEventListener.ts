@@ -146,7 +146,7 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                                         address: REWARD_CONTRACT_ADDRESS,
                                         abi: RewardSwapAbi,
                                         functionName: "rewardFirstSwap",
-                                        args: [clientAddress, txnId],
+                                        args: [clientAddress, txnId, true],
                                         account: signer,
                                         chain: chainId,
                                     });
@@ -160,7 +160,7 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                                         address: REWARD_CONTRACT_ADDRESS,
                                         abi: RewardSwapAbi,
                                         functionName: "rewardFirstSwap",
-                                        args: [merchantAddress, txnId],
+                                        args: [merchantAddress, txnId, false],
                                         account: signer,
                                         chain: chainId,
                                     });

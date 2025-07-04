@@ -101,7 +101,8 @@ export const RewardSwapAbi = [
     name: "rewardFirstSwap",
     inputs: [
       { internalType: "address", name: "user", type: "address" },
-      { internalType: "uint256", name: "txnId", type: "uint256" }
+      { internalType: "uint256", name: "txnId", type: "uint256" },
+      { internalType: "bool", name: "isClient", type: "bool" }
     ],
     outputs: [],
     stateMutability: "nonpayable"
