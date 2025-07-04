@@ -31,7 +31,11 @@ export class SargoRewardService {
 
     async saveReward(req: IReward) {
         const _req = { ...req, url: apiOptions.endPoints.appBaseUrl };
-        return await Http.post(`${apiOptions.endPoints.rewards}/add`, _req);
+        const res = await Http.post(`${apiOptions.endPoints.rewards}/add`, _req);
+
+        console.log(`[RewardService] 💿🔁 Reward saved for user ${req.userAccount} | Txn ${req.txId}`);
+
+        return res;
     }
 
 
