@@ -9,6 +9,7 @@ import { TxType } from "../enums/TxType";
 import { Status } from "../enums/Status";
 import { SargoRewardService } from "../controllers/SargoRewardController";
 import { IReward } from "../interfaces/IReward";
+import { formatUnits } from "viem";
 
 dotenv.config({ path: `.env.${process.env.NODE_ENV}` });
 
@@ -207,13 +208,14 @@ export async function startSwapListener(runtime: IAgentRuntime) {
                             txnId: bigint;
                         };
 
-                        console.log(`[RewardListener] 🎉 ${user} rewarded ${amount} tokens at txn ${txnId}`);
+                        const formattedAmount = formatUnits(amount, 18); 
+                        console.log(`[RewardListener] 🎉 ${user} rewarded ${formattedAmount} cUSD at txn ${txnId}`);
 
                         // await rewardService.getRewardedTxnId(txnId);
                         await rewardService.saveReward({
                             txId: Number(txnId),
                             userAccount: user,
-                            amount: Number(amount),
+                            amount: Number(formattedAmount),
                             tokenName: "cUSD",
                             timestamp: Number(timestamp),
                             rewardType: "swap",
